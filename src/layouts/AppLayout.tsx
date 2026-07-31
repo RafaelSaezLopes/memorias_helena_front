@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Avatar, Button, Dropdown, Layout, Menu, Space, Typography, Grid } from 'antd';
 import {
   DashboardOutlined,
   BookOutlined,
+  CloseOutlined,
   DashboardFilled,
   FolderOpenOutlined,
   FileTextOutlined,
@@ -28,7 +29,19 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();
-  const mobile = !screens.md;
+  const mobile = screens.md === false;
+
+  useEffect(() => {
+    if (mobile) {
+      setCollapsed(true);
+    }
+  }, [mobile]);
+
+  useEffect(() => {
+    if (mobile) {
+      setCollapsed(true);
+    }
+  }, [location.pathname, mobile]);
 
   const can = (module: string) => user?.role === 'ADMIN' || user?.permissions?.includes(module);
 
@@ -49,19 +62,50 @@ export function AppLayout() {
     { key: '/configuracoes', icon: <SettingOutlined />, label: 'Configurações' },
   ].filter(Boolean) as any[];
 
+  const handleMenuClick = ({ key }: { key: string }) => {
+    navigate(key);
+    if (mobile) {
+      setCollapsed(true);
+    }
+  };
+
+  const menuOpen = mobile && !collapsed;
+
   return (
-    <Layout className="app-shell">
+    <Layout className={`app-shell ${menuOpen ? 'mobile-menu-open' : ''}`}>
+      {menuOpen && (
+        <button
+          type="button"
+          className="mobile-menu-backdrop"
+          aria-label="Fechar menu"
+          onClick={() => setCollapsed(true)}
+        />
+      )}
+
       <Sider
         width={260}
         collapsedWidth={mobile ? 0 : 80}
-        collapsed={mobile ? collapsed : collapsed}
-        className="sidebar"
-        breakpoint="md"
+        collapsed={collapsed}
+        className={`sidebar ${mobile ? 'sidebar-mobile' : ''}`}
         trigger={null}
       >
         <div className="brand">
           <div className="brand-mark">H</div>
-          {!collapsed && <div><strong>Memórias</strong><span>da Helena</span></div>}
+          {!collapsed && (
+            <div>
+              <strong>Memórias</strong>
+              <span>da Helena</span>
+            </div>
+          )}
+          {mobile && !collapsed && (
+            <Button
+              type="text"
+              className="mobile-menu-close"
+              icon={<CloseOutlined />}
+              aria-label="Fechar menu"
+              onClick={() => setCollapsed(true)}
+            />
+          )}
         </div>
         <Menu
           mode="inline"
@@ -69,16 +113,18 @@ export function AppLayout() {
           selectedKeys={[location.pathname]}
           defaultOpenKeys={['saude']}
           items={items}
-          onClick={({ key }) => navigate(key)}
+          onClick={handleMenuClick}
         />
       </Sider>
 
-      <Layout>
+      <Layout className="app-main-layout">
         <Header className="topbar">
           <Button
             type="text"
+            className="menu-toggle-button"
+            aria-label={collapsed ? 'Abrir menu' : 'Fechar menu'}
             icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed((v) => !v)}
+            onClick={() => setCollapsed((value) => !value)}
           />
           <Dropdown
             menu={{
@@ -92,11 +138,18 @@ export function AppLayout() {
           >
             <Space className="user-menu">
               <Avatar icon={<UserOutlined />} />
-              {!mobile && <div><Typography.Text strong>{user?.name}</Typography.Text><small>{user?.role === 'ADMIN' ? 'Administrador' : 'Familiar'}</small></div>}
+              {!mobile && (
+                <div>
+                  <Typography.Text strong>{user?.name}</Typography.Text>
+                  <small>{user?.role === 'ADMIN' ? 'Administrador' : 'Familiar'}</small>
+                </div>
+              )}
             </Space>
           </Dropdown>
         </Header>
-        <Content className="page-content"><Outlet /></Content>
+        <Content className="page-content">
+          <Outlet />
+        </Content>
       </Layout>
     </Layout>
   );

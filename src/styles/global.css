@@ -50,3 +50,72 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 .photo-grid-placeholder { height: 250px; display: flex; align-items: center; justify-content: center; background: #f5f5f5; }
 .photo-card .ant-card-body { min-height: 82px; }
 @media (max-width: 768px) { .album-cover, .photo-grid-image, .photo-grid-placeholder { height: 220px; } }
+
+/* Navegação responsiva */
+.app-main-layout { min-width: 0; }
+.menu-toggle-button { position: relative; z-index: 31; }
+.mobile-menu-backdrop { display: none; }
+.mobile-menu-close { margin-left: auto; color: #fff !important; font-size: 18px; }
+
+@media (max-width: 767px) {
+  body.mobile-menu-open { overflow: hidden; }
+
+  .sidebar-mobile {
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    height: 100dvh;
+    z-index: 1001 !important;
+    box-shadow: 16px 0 40px rgba(15, 23, 42, 0.28);
+    transition: all 0.2s ease !important;
+  }
+
+  .sidebar-mobile.ant-layout-sider-collapsed {
+    box-shadow: none;
+  }
+
+  .mobile-menu-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(2px);
+    cursor: pointer;
+  }
+
+  .mobile-menu-open {
+    overflow: hidden;
+  }
+
+  .mobile-menu-open .app-main-layout {
+    pointer-events: none;
+  }
+
+  .mobile-menu-open .sidebar-mobile,
+  .mobile-menu-open .mobile-menu-backdrop {
+    pointer-events: auto;
+  }
+
+  .brand {
+    min-width: 260px;
+  }
+
+  .sidebar-mobile .ant-menu {
+    max-height: calc(100dvh - 80px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .topbar {
+    z-index: 30;
+  }
+
+  .page-content {
+    width: 100%;
+    overflow-x: hidden;
+  }
+}
