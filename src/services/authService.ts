@@ -14,7 +14,7 @@ type ApiAuthResponse = {
 export async function login(email: string, password: string): Promise<ApiAuthResponse> {
   if (useMocks) {
     await new Promise((resolve) => setTimeout(resolve, 300));
-    if (email !== 'rafael@demo.com' || password !== '123456') {
+    if (email !== '' || password !== '') {
       throw new Error('E-mail ou senha inválidos');
     }
 

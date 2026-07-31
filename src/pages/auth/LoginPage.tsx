@@ -31,7 +31,7 @@ export default function LoginPage() {
         <Typography.Title level={3}>Bem-vindo</Typography.Title>
         <Typography.Text type="secondary">Entre com sua conta para continuar.</Typography.Text>
         {error && <Alert type="error" message={error} showIcon />}
-        <Form layout="vertical" onFinish={submit} initialValues={{ email: 'rafael@demo.com', password: '123456', remember: true }}>
+        <Form layout="vertical" onFinish={submit} initialValues={{ email: '', password: '', remember: true }}>
           <Form.Item label="E-mail" name="email" rules={[{ required: true }, { type: 'email' }]}>
             <Input prefix={<MailOutlined />} size="large" placeholder="seu@email.com" />
           </Form.Item>
@@ -41,7 +41,7 @@ export default function LoginPage() {
           <Form.Item name="remember" valuePropName="checked"><Checkbox>Manter conectado</Checkbox></Form.Item>
           <Button type="primary" htmlType="submit" size="large" block loading={loading}>Entrar</Button>
         </Form>
-        <div className="demo-hint">Demonstração: rafael@demo.com / 123456</div>
+        
       </Card>
     </div>
   );
