@@ -24,7 +24,7 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-hero">
         <div className="hero-badge">H</div>
-        <Typography.Title>Memórias da Helena</Typography.Title>
+        <Typography.Title>Agenda da Helena</Typography.Title>
         <Typography.Paragraph>Um espaço seguro para organizar momentos, saúde e informações importantes.</Typography.Paragraph>
       </div>
       <Card className="login-card">

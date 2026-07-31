@@ -93,7 +93,7 @@ export function AppLayout() {
           <div className="brand-mark">H</div>
           {!collapsed && (
             <div>
-              <strong>Memórias</strong>
+              <strong>Agenda</strong>
               <span>da Helena</span>
             </div>
           )}
