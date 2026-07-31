@@ -7,7 +7,6 @@ import { PageHeader } from '../../components/PageHeader';
 import { AuthenticatedImage } from '../../components/AuthenticatedImage';
 import { albumsService, type AlbumApi } from '../../services/albumsService';
 
-const fallbackCover = 'https://images.unsplash.com/photo-1492725764893-90b379c2b6e7?auto=format&fit=crop&w=900&q=80';
 
 export default function AlbumsPage() {
   const navigate = useNavigate();
@@ -86,7 +85,7 @@ export default function AlbumsPage() {
               <Col xs={24} sm={12} xl={8} key={album.id}>
                 <Card
                   hoverable
-                  cover={<AuthenticatedImage fileId={album.coverFileId} alt={album.title} className="album-cover" fallback={fallbackCover} onClick={() => navigate(`/fotos/${album.id}`)} />}
+                  cover={<AuthenticatedImage fileId={album.coverFileId} alt={album.title} className="album-cover" onClick={() => navigate(`/fotos/${album.id}`)} />}
                   actions={[
                     <Button type="link" icon={<CameraOutlined />} onClick={() => navigate(`/fotos/${album.id}`)}>Abrir álbum</Button>,
                     <Popconfirm title="Excluir este álbum?" description="As referências das fotos também serão removidas." onConfirm={() => remove(album.id)} okText="Excluir" cancelText="Cancelar">

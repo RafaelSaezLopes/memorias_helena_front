@@ -25,7 +25,6 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 .hero-badge { width:64px; height:64px; color:white; background:#7c3aed; }
 .login-card { margin:auto; width:min(430px,90%); padding:18px; }
 .login-card .ant-alert { margin:18px 0; }
-.demo-hint { margin-top:16px; padding:12px; background:#f5f3ff; border-radius:10px; color:#6d28d9; font-size:12px; text-align:center; }
 @media(max-width: 900px){ .login-page{grid-template-columns:1fr}.login-hero{display:none}.login-card{margin:10vh auto}.page-content{padding:16px}.page-header{align-items:stretch;flex-direction:column}.topbar{padding:0 12px}.sidebar{position:fixed!important;z-index:20} }
 .filter-card { margin-bottom: 16px; }
 .stats-row { margin-bottom: 16px; }
