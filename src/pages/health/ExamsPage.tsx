@@ -182,10 +182,17 @@ export default function ExamsPage() {
 
       const files = newFiles
         .map((item) => item.originFileObj)
-        .filter((item): item is File => item instanceof File);
+        .filter(
+          (item): item is NonNullable<typeof item> =>
+            item !== undefined && item !== null,
+        );
 
       for (const file of files) {
-        await examsService.uploadFile(child.id, saved.id, file);
+        await examsService.uploadFile(
+          child.id,
+          saved.id,
+          file as unknown as File,
+        );
       }
 
       message.success(editing ? 'Exame atualizado no banco de dados.' : 'Exame cadastrado no banco de dados.');
