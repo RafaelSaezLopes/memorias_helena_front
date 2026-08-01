@@ -118,3 +118,42 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
     overflow-x: hidden;
   }
 }
+
+/* Gravador e transcrição do diário */
+.voice-recorder-card {
+  margin-bottom: 18px;
+  border-color: #ddd6fe;
+  background: linear-gradient(180deg, #faf8ff 0%, #ffffff 100%);
+}
+.voice-recorder-card .ant-card-head {
+  min-height: 44px;
+  border-bottom-color: #ede9fe;
+}
+.voice-transcript-preview {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px solid #e9e3ff;
+  border-radius: 10px;
+  background: #fff;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.voice-audio-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+}
+.voice-audio-preview audio {
+  width: 100%;
+  max-width: 480px;
+}
+.voice-recorder-help {
+  margin: 10px 0 0 !important;
+  font-size: 12px;
+}
+@media (max-width: 767px) {
+  .voice-recorder-card .ant-card-body { padding: 14px; }
+  .voice-recorder-card .ant-btn { min-height: 40px; }
+  .voice-audio-preview audio { max-width: 100%; }
+}

@@ -3,6 +3,7 @@ import { Alert, Button, Card, Col, DatePicker, Empty, Form, Input, Modal, Popcon
 import dayjs, { Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../../components/PageHeader';
+import { VoiceTranscriptionRecorder } from '../../components/VoiceTranscriptionRecorder';
 import { useAuth } from '../../contexts/AuthContext';
 import { dailyNotesService, type DailyNoteApi } from '../../services/dailyNotesService';
 import { professionalsService, type ProfessionalApi, type SpecialtyApi } from '../../services/professionalsService';
@@ -142,7 +143,24 @@ export default function DailyNotesPage() {
         <Form.Item label="Título" name="title" rules={[{ required: true, message: 'Informe um título' }]}><Input placeholder={noteType === 'CONSULTA' ? 'Ex.: Retorno com a pediatra' : 'Ex.: Dia tranquilo na escola'} maxLength={200} /></Form.Item>
         {noteType === 'DIA' && <Form.Item label="Como ela estava?" name="mood"><Select options={Object.entries(moodLabel).map(([value, label]) => ({ value, label }))} /></Form.Item>}
         {noteType === 'CONSULTA' && <Row gutter={16}><Col xs={24} sm={12}><Form.Item label="Profissional" name="professionalId"><Select allowClear showSearch optionFilterProp="label" placeholder="Selecione o profissional" options={professionals.map((p) => ({ value: p.id, label: p.name }))} /></Form.Item></Col><Col xs={24} sm={12}><Form.Item label="Especialidade" name="specialtyId"><Select allowClear showSearch optionFilterProp="label" placeholder="Selecione a especialidade" options={specialties.map((s) => ({ value: s.id, label: s.name }))} /></Form.Item></Col></Row>}
-        <Form.Item label={noteType === 'CONSULTA' ? 'Comentários e orientações da consulta' : 'Comentário do dia'} name="content" rules={[{ required: true, message: 'Escreva a anotação' }]}><Input.TextArea rows={7} maxLength={5000} showCount placeholder="Descreva o que aconteceu, sintomas, comportamento, orientações, dúvidas ou próximos passos..." /></Form.Item>
+        <VoiceTranscriptionRecorder
+          consultationMode={noteType === 'CONSULTA'}
+          initialText={form.getFieldValue('content') || ''}
+          onApply={({ transcript, summary }) => {
+            const current = (form.getFieldValue('content') || '').trim();
+            const voiceText = noteType === 'CONSULTA'
+              ? `TRANSCRIÇÃO DA CONSULTA:
+${transcript}${summary ? `
+
+RESUMO DA CONSULTA:
+${summary}` : ''}`
+              : transcript;
+            form.setFieldValue('content', current ? `${current}
+
+${voiceText}` : voiceText);
+          }}
+        />
+        <Form.Item label={noteType === 'CONSULTA' ? 'Comentários, transcrição e resumo da consulta' : 'Comentário do dia'} name="content" rules={[{ required: true, message: 'Escreva a anotação ou use o gravador de voz' }]}><Input.TextArea rows={10} maxLength={15000} showCount placeholder="Descreva o que aconteceu, sintomas, comportamento, orientações, dúvidas ou próximos passos..." /></Form.Item>
         <Form.Item label="Marcadores" name="tags"><Select mode="tags" tokenSeparators={[',']} placeholder="Ex.: escola, sono, dor, consulta" /></Form.Item>
       </Form>
     </Modal>
