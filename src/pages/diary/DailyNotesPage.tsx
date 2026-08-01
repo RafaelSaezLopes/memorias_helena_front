@@ -144,7 +144,7 @@ export default function DailyNotesPage() {
         {noteType === 'DIA' && <Form.Item label="Como ela estava?" name="mood"><Select options={Object.entries(moodLabel).map(([value, label]) => ({ value, label }))} /></Form.Item>}
         {noteType === 'CONSULTA' && <Row gutter={16}><Col xs={24} sm={12}><Form.Item label="Profissional" name="professionalId"><Select allowClear showSearch optionFilterProp="label" placeholder="Selecione o profissional" options={professionals.map((p) => ({ value: p.id, label: p.name }))} /></Form.Item></Col><Col xs={24} sm={12}><Form.Item label="Especialidade" name="specialtyId"><Select allowClear showSearch optionFilterProp="label" placeholder="Selecione a especialidade" options={specialties.map((s) => ({ value: s.id, label: s.name }))} /></Form.Item></Col></Row>}
         <VoiceTranscriptionRecorder
-          childId={child.id}
+          childId={child!.id}
           consultationMode={noteType === 'CONSULTA'}
           initialText={form.getFieldValue('content') || ''}
           onApply={({ transcript, summary }) => {
