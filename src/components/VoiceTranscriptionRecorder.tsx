@@ -122,8 +122,14 @@ export function VoiceTranscriptionRecorder({ consultationMode, initialText = '',
     () => window.SpeechRecognition || window.webkitSpeechRecognition,
     [],
   );
-  const recordingSupported = Boolean(SpeechRecognitionApi && navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 
+  const recordingSupported =
+    !!SpeechRecognitionApi &&
+    typeof window !== "undefined" &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === "function" &&
+    typeof MediaRecorder !== "undefined";
+    
   useEffect(() => {
     return () => {
       shouldRestartRef.current = false;
