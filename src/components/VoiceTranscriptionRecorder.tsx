@@ -7,191 +7,69 @@ import {
 } from '@ant-design/icons';
 import { Alert, Button, Card, Input, Space, Tag, Typography, Upload, message } from 'antd';
 import type { UploadProps } from 'antd';
-import { useEffect, useMemo, useRef, useState } from 'react';
-
-type SpeechRecognitionEventLike = Event & {
-  resultIndex: number;
-  results: ArrayLike<{
-    isFinal: boolean;
-    0: { transcript: string };
-  }>;
-};
-
-type SpeechRecognitionErrorEventLike = Event & {
-  error: string;
-  message?: string;
-};
-
-type SpeechRecognitionLike = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-};
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
+import { useEffect, useRef, useState } from 'react';
+import { audioTranscriptionService } from '../services/audioTranscriptionService';
 
 type Props = {
+  childId: string;
   consultationMode: boolean;
   initialText?: string;
   onApply: (value: { transcript: string; summary?: string }) => void;
 };
 
-const normalizeText = (value: string) => value
-  .replace(/\s+/g, ' ')
-  .replace(/\s+([,.!?;:])/g, '$1')
-  .trim();
+const MAX_AUDIO_SIZE_MB = 25;
+const AUDIO_EXTENSION_PATTERN = /\.(mp3|mp4|mpeg|mpga|wav|m4a|ogg|oga|webm|flac)$/i;
 
-const splitSentences = (text: string) => normalizeText(text)
-  .split(/(?<=[.!?])\s+|\n+/)
-  .map((sentence) => sentence.trim())
-  .filter((sentence) => sentence.length > 8);
-
-const includesAny = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
-
-/**
- * Resumo local e determinístico. Não inventa informações: apenas reorganiza
- * frases que realmente aparecem na transcrição.
- */
-export const buildConsultationSummary = (transcript: string) => {
-  const sentences = splitSentences(transcript);
-  if (!sentences.length) return '';
-
-  const groups: Array<{ title: string; terms: string[]; lines: string[] }> = [
-    { title: 'Motivo e sintomas', terms: ['sintom', 'dor', 'febre', 'queixa', 'motivo', 'urin', 'xixi', 'infecção', 'perda', 'urgência'], lines: [] },
-    { title: 'Avaliação do profissional', terms: ['diagnóst', 'avalia', 'resultado', 'observou', 'explicou', 'considerou', 'hipótese'], lines: [] },
-    { title: 'Medicamentos e cuidados', terms: ['remédio', 'medicamento', 'dose', 'dosagem', 'ml', 'comprimido', 'tomar', 'aplicar', 'tratamento', 'cuidado'], lines: [] },
-    { title: 'Exames e procedimentos', terms: ['exame', 'ultrassom', 'cintilografia', 'urina', 'sangue', 'procedimento', 'cirurgia', 'coleta'], lines: [] },
-    { title: 'Retorno e próximos passos', terms: ['retorno', 'voltar', 'agendar', 'acompanhar', 'próximo', 'orientou', 'recomendou', 'encaminhou'], lines: [] },
-  ];
-
-  const unclassified: string[] = [];
-  sentences.forEach((sentence) => {
-    const lower = sentence.toLocaleLowerCase('pt-BR');
-    const group = groups.find((item) => includesAny(lower, item.terms));
-    if (group) group.lines.push(sentence);
-    else unclassified.push(sentence);
-  });
-
-  const populated = groups.filter((group) => group.lines.length > 0);
-  const result: string[] = [];
-
-  populated.forEach((group) => {
-    result.push(`${group.title}:`);
-    group.lines.slice(0, 4).forEach((line) => result.push(`• ${line}`));
-    result.push('');
-  });
-
-  if (unclassified.length) {
-    result.push('Outros pontos mencionados:');
-    unclassified.slice(0, 4).forEach((line) => result.push(`• ${line}`));
-  }
-
-  return result.join('\n').trim();
+const extensionFromMime = (mime: string) => {
+  if (mime.includes('ogg')) return 'ogg';
+  if (mime.includes('mp4')) return 'm4a';
+  return 'webm';
 };
 
-export function VoiceTranscriptionRecorder({ consultationMode, initialText = '', onApply }: Props) {
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+export function VoiceTranscriptionRecorder({
+  childId,
+  consultationMode,
+  initialText = '',
+  onApply,
+}: Props) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const finalTextRef = useRef('');
-  const shouldRestartRef = useRef(false);
 
   const [recording, setRecording] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [transcript, setTranscript] = useState(initialText);
-  const [interimText, setInterimText] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioFileName, setAudioFileName] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState(initialText);
+  const [summary, setSummary] = useState('');
+  const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const SpeechRecognitionApi = useMemo(
-    () => window.SpeechRecognition || window.webkitSpeechRecognition,
-    [],
-  );
-
   const recordingSupported =
-    !!SpeechRecognitionApi &&
-    typeof window !== "undefined" &&
+    typeof window !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
     !!navigator.mediaDevices &&
-    typeof navigator.mediaDevices.getUserMedia === "function" &&
-    typeof MediaRecorder !== "undefined";
-    
+    typeof navigator.mediaDevices.getUserMedia === 'function' &&
+    typeof MediaRecorder !== 'undefined';
+
   useEffect(() => {
     return () => {
-      shouldRestartRef.current = false;
-      recognitionRef.current?.abort();
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
   }, [audioUrl]);
 
-  const stopResources = () => {
-    shouldRestartRef.current = false;
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setRecording(false);
-    setInterimText('');
-  };
-
-  const createRecognition = () => {
-    if (!SpeechRecognitionApi) return null;
-    const recognition = new SpeechRecognitionApi();
-    recognition.lang = 'pt-BR';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onresult = (event) => {
-      let finalPart = '';
-      let interimPart = '';
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        const spoken = result[0]?.transcript || '';
-        if (result.isFinal) finalPart += `${spoken} `;
-        else interimPart += spoken;
-      }
-      if (finalPart) {
-        finalTextRef.current = normalizeText(`${finalTextRef.current} ${finalPart}`);
-        setTranscript(finalTextRef.current);
-      }
-      setInterimText(interimPart.trim());
-    };
-
-    recognition.onerror = (event) => {
-      if (event.error === 'no-speech') return;
-      if (event.error === 'aborted') return;
-      const messages: Record<string, string> = {
-        'not-allowed': 'Permissão do microfone negada. Libere o microfone nas configurações do navegador.',
-        'audio-capture': 'Não foi possível acessar o microfone.',
-        network: 'A transcrição do navegador perdeu a conexão. Tente novamente.',
-      };
-      setError(messages[event.error] || event.message || `Erro na transcrição: ${event.error}`);
-    };
-
-    recognition.onend = () => {
-      if (!shouldRestartRef.current) return;
-      try { recognition.start(); } catch { /* o navegador ainda pode estar finalizando a sessão anterior */ }
-    };
-
-    return recognition;
+  const replaceAudio = (file: File) => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioFile(file);
+    setAudioUrl(URL.createObjectURL(file));
+    setTranscript('');
+    setSummary('');
+    setWarning(null);
+    setError(null);
   };
 
   const start = async () => {
@@ -202,161 +80,252 @@ export function VoiceTranscriptionRecorder({ consultationMode, initialText = '',
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
-      finalTextRef.current = normalizeText(transcript || initialText);
 
-      const recorder = new MediaRecorder(stream);
+      const preferredMime = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+      ].find((mime) => MediaRecorder.isTypeSupported(mime));
+
+      const recorder = preferredMime
+        ? new MediaRecorder(stream, { mimeType: preferredMime })
+        : new MediaRecorder(stream);
+
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
         if (!chunksRef.current.length) return;
-        if (audioUrl) URL.revokeObjectURL(audioUrl);
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        setAudioUrl(URL.createObjectURL(blob));
-        setAudioFileName(`gravacao-${new Date().toISOString().replace(/[:.]/g, '-')}.${(recorder.mimeType || 'audio/webm').includes('ogg') ? 'ogg' : 'webm'}`);
-      };
-      recorder.start(1000);
 
-      const recognition = createRecognition();
-      if (!recognition) throw new Error('Reconhecimento de voz indisponível.');
-      recognitionRef.current = recognition;
-      shouldRestartRef.current = true;
-      recognition.start();
+        const mime = recorder.mimeType || preferredMime || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: mime });
+        const extension = extensionFromMime(mime);
+        const file = new File(
+          [blob],
+          `gravacao-${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`,
+          { type: mime },
+        );
+        replaceAudio(file);
+        message.success('Gravação finalizada. Clique em “Transcrever com Whisper”.');
+      };
+
+      recorder.start(1000);
       setRecording(true);
       message.info('Gravação iniciada. Fale próximo ao microfone.');
     } catch (err: any) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
-      setError(err?.message || 'Não foi possível iniciar o gravador.');
+      setError(err?.message || 'Não foi possível acessar o microfone.');
     } finally {
       setStarting(false);
     }
   };
 
   const stop = () => {
-    stopResources();
-    message.success('Gravação finalizada. Revise a transcrição antes de aplicar.');
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    setRecording(false);
   };
-
-  const clear = () => {
-    stopResources();
-    finalTextRef.current = '';
-    setTranscript('');
-    setInterimText('');
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    setAudioUrl(null);
-    setAudioFileName(null);
-    setError(null);
-  };
-
 
   const beforeUpload: UploadProps['beforeUpload'] = (file) => {
-    const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|oga|webm|flac)$/i.test(file.name);
+    const isAudio = file.type.startsWith('audio/') || AUDIO_EXTENSION_PATTERN.test(file.name);
     if (!isAudio) {
       message.error('Selecione um arquivo de áudio válido.');
       return Upload.LIST_IGNORE;
     }
-
-    const maxSizeMb = 25;
-    if (file.size > maxSizeMb * 1024 * 1024) {
-      message.error(`O áudio deve ter no máximo ${maxSizeMb} MB.`);
+    if (file.size > MAX_AUDIO_SIZE_MB * 1024 * 1024) {
+      message.error(`O áudio deve ter no máximo ${MAX_AUDIO_SIZE_MB} MB.`);
       return Upload.LIST_IGNORE;
     }
 
-    stopResources();
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    setAudioUrl(URL.createObjectURL(file));
-    setAudioFileName(file.name);
-    setError(null);
-    message.success('Arquivo de áudio carregado. Ouça e revise a transcrição antes de aplicar.');
+    replaceAudio(file as File);
+    message.success('Áudio carregado. Clique em “Transcrever com Whisper”.');
     return false;
   };
 
-  const apply = () => {
-    const text = normalizeText(`${transcript} ${interimText}`);
-    if (!text) {
-      message.warning('Ainda não há texto transcrito.');
+  const transcribe = async () => {
+    if (!audioFile) {
+      message.warning('Grave ou selecione um arquivo de áudio primeiro.');
       return;
     }
-    onApply({
-      transcript: text,
-      summary: consultationMode ? buildConsultationSummary(text) : undefined,
-    });
-    message.success(consultationMode ? 'Transcrição e resumo adicionados à consulta' : 'Transcrição adicionada à anotação');
+
+    setProcessing(true);
+    setError(null);
+    setWarning(null);
+    try {
+      const result = await audioTranscriptionService.transcribe({
+        childId,
+        file: audioFile,
+        consultationMode,
+      });
+      setTranscript(result.transcript || '');
+      setSummary(result.summary || '');
+      setWarning(result.warning || null);
+      message.success(
+        consultationMode
+          ? 'Consulta transcrita e resumida.'
+          : 'Áudio transcrito com sucesso.',
+      );
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          'Não foi possível transcrever o áudio.',
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const apply = () => {
+    const text = transcript.trim();
+    if (!text) {
+      message.warning('Transcreva o áudio ou informe o texto antes de aplicar.');
+      return;
+    }
+    onApply({ transcript: text, summary: consultationMode ? summary.trim() || undefined : undefined });
+    message.success(
+      consultationMode
+        ? 'Transcrição e resumo adicionados à consulta.'
+        : 'Transcrição adicionada à anotação.',
+    );
+  };
+
+  const clear = () => {
+    if (recording) stop();
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioFile(null);
+    setAudioUrl(null);
+    setTranscript('');
+    setSummary('');
+    setWarning(null);
+    setError(null);
   };
 
   return (
-    <Card size="small" className="voice-recorder-card" title={
-      <Space>
-        <AudioOutlined />
-        <span>{consultationMode ? 'Gravar e transcrever consulta' : 'Ditado por voz'}</span>
-        {recording && <Tag color="red">GRAVANDO</Tag>}
-      </Space>
-    }>
+    <Card
+      size="small"
+      className="voice-recorder-card"
+      title={
+        <Space>
+          <AudioOutlined />
+          <span>{consultationMode ? 'Gravar ou enviar áudio da consulta' : 'Gravar ou enviar áudio'}</span>
+          {recording && <Tag color="red">GRAVANDO</Tag>}
+        </Space>
+      }
+    >
       {!recordingSupported && (
         <Alert
           type="warning"
           showIcon
-          message="A gravação com transcrição em tempo real não está disponível neste navegador."
-          description="Você ainda pode enviar um arquivo de áudio, ouvi-lo e preencher ou revisar a transcrição manualmente. Para ditado automático, use Chrome ou Edge por HTTPS."
+          message="A gravação não está disponível neste navegador."
+          description="Você ainda pode selecionar um arquivo MP3, WAV, M4A, OGG ou WEBM para transcrição."
           style={{ marginBottom: 12 }}
         />
       )}
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />}
+      {warning && <Alert type="warning" showIcon message={warning} style={{ marginBottom: 12 }} />}
 
       <Space wrap style={{ marginBottom: 12 }}>
         {!recording ? (
-          <Button type="primary" icon={<AudioOutlined />} loading={starting} disabled={!recordingSupported} onClick={() => void start()}>
-            {transcript ? 'Continuar gravação' : 'Iniciar gravação'}
+          <Button
+            type="primary"
+            icon={<AudioOutlined />}
+            loading={starting}
+            disabled={!recordingSupported || processing}
+            onClick={() => void start()}
+          >
+            Iniciar gravação
           </Button>
         ) : (
-          <Button danger icon={<StopOutlined />} onClick={stop}>Parar gravação</Button>
+          <Button danger icon={<StopOutlined />} onClick={stop}>
+            Parar gravação
+          </Button>
         )}
+
         <Upload
-          accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.webm,.flac"
+          accept="audio/*,.mp3,.mp4,.mpeg,.mpga,.wav,.m4a,.ogg,.oga,.webm,.flac"
           showUploadList={false}
           beforeUpload={beforeUpload}
-          disabled={recording}
+          disabled={recording || processing}
         >
-          <Button icon={<UploadOutlined />} disabled={recording}>Enviar áudio</Button>
+          <Button icon={<UploadOutlined />} disabled={recording || processing}>
+            Enviar áudio
+          </Button>
         </Upload>
-        <Button icon={<FileTextOutlined />} disabled={!transcript && !interimText} onClick={apply}>
+
+        <Button
+          icon={<FileTextOutlined />}
+          loading={processing}
+          disabled={!audioFile || recording}
+          onClick={() => void transcribe()}
+        >
+          Transcrever com Whisper
+        </Button>
+
+        <Button
+          type="primary"
+          ghost
+          icon={<FileTextOutlined />}
+          disabled={!transcript || processing}
+          onClick={apply}
+        >
           {consultationMode ? 'Aplicar transcrição e resumo' : 'Aplicar transcrição'}
         </Button>
-        <Button icon={<DeleteOutlined />} disabled={!transcript && !audioUrl && !recording} onClick={clear}>Limpar</Button>
+
+        <Button
+          icon={<DeleteOutlined />}
+          disabled={!audioFile && !transcript && !recording}
+          onClick={clear}
+        >
+          Limpar
+        </Button>
       </Space>
 
-      {(transcript || interimText || audioUrl) && (
+      {audioUrl && (
+        <div className="voice-audio-preview">
+          <Typography.Text type="secondary">
+            Áudio selecionado: {audioFile?.name}
+          </Typography.Text>
+          <audio controls src={audioUrl} preload="metadata" />
+        </div>
+      )}
+
+      {(transcript || processing) && (
         <div className="voice-transcript-preview">
           <Typography.Text strong>Transcrição</Typography.Text>
           <Input.TextArea
-            value={normalizeText(`${transcript} ${interimText}`)}
-            onChange={(event) => {
-              finalTextRef.current = event.target.value;
-              setTranscript(event.target.value);
-              setInterimText('');
-            }}
-            rows={6}
-            maxLength={15000}
+            value={transcript}
+            onChange={(event) => setTranscript(event.target.value)}
+            rows={7}
+            maxLength={30000}
             showCount
-            placeholder={audioUrl
-              ? 'Ouça o arquivo e revise ou digite aqui a transcrição. A transcrição automática de arquivos enviados exige um serviço de reconhecimento no backend.'
-              : 'A transcrição aparecerá aqui durante a gravação.'}
+            disabled={processing}
+            placeholder="A transcrição produzida pelo Whisper aparecerá aqui."
           />
         </div>
       )}
 
-      {audioUrl && (
-        <div className="voice-audio-preview">
-          <Typography.Text type="secondary">Áudio selecionado{audioFileName ? `: ${audioFileName}` : ''}</Typography.Text>
-          <audio controls src={audioUrl} preload="metadata" />
+      {consultationMode && summary && (
+        <div className="voice-transcript-preview" style={{ marginTop: 12 }}>
+          <Typography.Text strong>Resumo da consulta</Typography.Text>
+          <Input.TextArea
+            value={summary}
+            onChange={(event) => setSummary(event.target.value)}
+            rows={9}
+            maxLength={15000}
+            showCount
+            disabled={processing}
+          />
         </div>
       )}
 
       <Typography.Paragraph type="secondary" className="voice-recorder-help">
         {consultationMode
-          ? 'Ao aplicar, o texto completo e um resumo organizado serão colocados no campo da consulta. Arquivos enviados podem ser ouvidos aqui; revise ou digite a transcrição antes de aplicar. Nomes, medicamentos, doses e datas devem ser conferidos.'
-          : 'Ao aplicar, a fala será inserida no campo de comentário. Revise o texto antes de salvar.'}
+          ? 'O áudio é enviado ao backend para transcrição pelo Whisper. O resumo organiza somente informações mencionadas na consulta. Revise nomes, doses, datas, diagnósticos e orientações antes de salvar.'
+          : 'O áudio é enviado ao backend para transcrição pelo Whisper. Revise o texto antes de salvar a anotação.'}
       </Typography.Paragraph>
     </Card>
   );
