@@ -109,7 +109,7 @@ export function VoiceTranscriptionRecorder({
           { type: mime },
         );
         replaceAudio(file);
-        message.success('Gravação finalizada. Clique em “Transcrever com Whisper”.');
+        message.success('Gravação finalizada. Clique em “Transcrever com Gemini”.');
       };
 
       recorder.start(1000);
@@ -141,7 +141,7 @@ export function VoiceTranscriptionRecorder({
     }
 
     replaceAudio(file as File);
-    message.success('Áudio carregado. Clique em “Transcrever com Whisper”.');
+    message.success('Áudio carregado. Clique em “Transcrever com Gemini”.');
     return false;
   };
 
@@ -165,8 +165,8 @@ export function VoiceTranscriptionRecorder({
       setWarning(result.warning || null);
       message.success(
         consultationMode
-          ? 'Consulta transcrita e resumida.'
-          : 'Áudio transcrito com sucesso.',
+          ? 'Consulta transcrita e resumida pelo Gemini.'
+          : 'Áudio transcrito pelo Gemini com sucesso.',
       );
     } catch (err: any) {
       setError(
@@ -262,7 +262,7 @@ export function VoiceTranscriptionRecorder({
           disabled={!audioFile || recording}
           onClick={() => void transcribe()}
         >
-          Transcrever com Whisper
+          Transcrever com Gemini
         </Button>
 
         <Button
@@ -303,7 +303,7 @@ export function VoiceTranscriptionRecorder({
             maxLength={30000}
             showCount
             disabled={processing}
-            placeholder="A transcrição produzida pelo Whisper aparecerá aqui."
+            placeholder="A transcrição produzida pelo Gemini aparecerá aqui."
           />
         </div>
       )}
@@ -324,8 +324,8 @@ export function VoiceTranscriptionRecorder({
 
       <Typography.Paragraph type="secondary" className="voice-recorder-help">
         {consultationMode
-          ? 'O áudio é enviado ao backend para transcrição pelo Whisper. O resumo organiza somente informações mencionadas na consulta. Revise nomes, doses, datas, diagnósticos e orientações antes de salvar.'
-          : 'O áudio é enviado ao backend para transcrição pelo Whisper. Revise o texto antes de salvar a anotação.'}
+          ? 'O áudio é enviado com segurança ao backend e analisado pelo Gemini 2.5 Flash. A IA transcreve a consulta e organiza apenas as informações mencionadas no áudio. Revise nomes, doses, datas, diagnósticos e orientações antes de salvar.'
+          : 'O áudio é enviado com segurança ao backend e transcrito pelo Gemini 2.5 Flash. Revise o texto antes de salvar a anotação.'}
       </Typography.Paragraph>
     </Card>
   );
