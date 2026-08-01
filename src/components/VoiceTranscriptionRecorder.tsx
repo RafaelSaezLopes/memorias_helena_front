@@ -3,8 +3,10 @@ import {
   DeleteOutlined,
   FileTextOutlined,
   StopOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Card, Space, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Input, Space, Tag, Typography, Upload, message } from 'antd';
+import type { UploadProps } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type SpeechRecognitionEventLike = Event & {
@@ -113,13 +115,14 @@ export function VoiceTranscriptionRecorder({ consultationMode, initialText = '',
   const [transcript, setTranscript] = useState(initialText);
   const [interimText, setInterimText] = useState('');
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioFileName, setAudioFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const SpeechRecognitionApi = useMemo(
     () => window.SpeechRecognition || window.webkitSpeechRecognition,
     [],
   );
-  const supported = Boolean(SpeechRecognitionApi && navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+  const recordingSupported = Boolean(SpeechRecognitionApi && navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 
   useEffect(() => {
     return () => {
@@ -186,7 +189,7 @@ export function VoiceTranscriptionRecorder({ consultationMode, initialText = '',
   };
 
   const start = async () => {
-    if (!supported || recording) return;
+    if (!recordingSupported || recording) return;
     setStarting(true);
     setError(null);
     try {
@@ -205,6 +208,7 @@ export function VoiceTranscriptionRecorder({ consultationMode, initialText = '',
         if (audioUrl) URL.revokeObjectURL(audioUrl);
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
         setAudioUrl(URL.createObjectURL(blob));
+        setAudioFileName(`gravacao-${new Date().toISOString().replace(/[:.]/g, '-')}.${(recorder.mimeType || 'audio/webm').includes('ogg') ? 'ogg' : 'webm'}`);
       };
       recorder.start(1000);
 
@@ -235,7 +239,31 @@ export function VoiceTranscriptionRecorder({ consultationMode, initialText = '',
     setInterimText('');
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
+    setAudioFileName(null);
     setError(null);
+  };
+
+
+  const beforeUpload: UploadProps['beforeUpload'] = (file) => {
+    const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|oga|webm|flac)$/i.test(file.name);
+    if (!isAudio) {
+      message.error('Selecione um arquivo de áudio válido.');
+      return Upload.LIST_IGNORE;
+    }
+
+    const maxSizeMb = 25;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      message.error(`O áudio deve ter no máximo ${maxSizeMb} MB.`);
+      return Upload.LIST_IGNORE;
+    }
+
+    stopResources();
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(URL.createObjectURL(file));
+    setAudioFileName(file.name);
+    setError(null);
+    message.success('Arquivo de áudio carregado. Ouça e revise a transcrição antes de aplicar.');
+    return false;
   };
 
   const apply = () => {
@@ -259,12 +287,12 @@ export function VoiceTranscriptionRecorder({ consultationMode, initialText = '',
         {recording && <Tag color="red">GRAVANDO</Tag>}
       </Space>
     }>
-      {!supported && (
+      {!recordingSupported && (
         <Alert
           type="warning"
           showIcon
-          message="Este navegador não oferece gravação e transcrição por voz."
-          description="Use o Google Chrome ou Microsoft Edge, abra o site por HTTPS e permita o acesso ao microfone."
+          message="A gravação com transcrição em tempo real não está disponível neste navegador."
+          description="Você ainda pode enviar um arquivo de áudio, ouvi-lo e preencher ou revisar a transcrição manualmente. Para ditado automático, use Chrome ou Edge por HTTPS."
           style={{ marginBottom: 12 }}
         />
       )}
@@ -272,37 +300,56 @@ export function VoiceTranscriptionRecorder({ consultationMode, initialText = '',
 
       <Space wrap style={{ marginBottom: 12 }}>
         {!recording ? (
-          <Button type="primary" icon={<AudioOutlined />} loading={starting} disabled={!supported} onClick={() => void start()}>
+          <Button type="primary" icon={<AudioOutlined />} loading={starting} disabled={!recordingSupported} onClick={() => void start()}>
             {transcript ? 'Continuar gravação' : 'Iniciar gravação'}
           </Button>
         ) : (
           <Button danger icon={<StopOutlined />} onClick={stop}>Parar gravação</Button>
         )}
+        <Upload
+          accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.webm,.flac"
+          showUploadList={false}
+          beforeUpload={beforeUpload}
+          disabled={recording}
+        >
+          <Button icon={<UploadOutlined />} disabled={recording}>Enviar áudio</Button>
+        </Upload>
         <Button icon={<FileTextOutlined />} disabled={!transcript && !interimText} onClick={apply}>
           {consultationMode ? 'Aplicar transcrição e resumo' : 'Aplicar transcrição'}
         </Button>
         <Button icon={<DeleteOutlined />} disabled={!transcript && !audioUrl && !recording} onClick={clear}>Limpar</Button>
       </Space>
 
-      {(transcript || interimText) && (
+      {(transcript || interimText || audioUrl) && (
         <div className="voice-transcript-preview">
-          <Typography.Text strong>Transcrição em tempo real</Typography.Text>
-          <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>
-            {transcript}{interimText ? ` ${interimText}` : ''}
-          </Typography.Paragraph>
+          <Typography.Text strong>Transcrição</Typography.Text>
+          <Input.TextArea
+            value={normalizeText(`${transcript} ${interimText}`)}
+            onChange={(event) => {
+              finalTextRef.current = event.target.value;
+              setTranscript(event.target.value);
+              setInterimText('');
+            }}
+            rows={6}
+            maxLength={15000}
+            showCount
+            placeholder={audioUrl
+              ? 'Ouça o arquivo e revise ou digite aqui a transcrição. A transcrição automática de arquivos enviados exige um serviço de reconhecimento no backend.'
+              : 'A transcrição aparecerá aqui durante a gravação.'}
+          />
         </div>
       )}
 
       {audioUrl && (
         <div className="voice-audio-preview">
-          <Typography.Text type="secondary">Prévia do áudio desta gravação:</Typography.Text>
+          <Typography.Text type="secondary">Áudio selecionado{audioFileName ? `: ${audioFileName}` : ''}</Typography.Text>
           <audio controls src={audioUrl} preload="metadata" />
         </div>
       )}
 
       <Typography.Paragraph type="secondary" className="voice-recorder-help">
         {consultationMode
-          ? 'Ao aplicar, o texto completo e um resumo organizado serão colocados no campo da consulta. Revise nomes, medicamentos, doses e datas antes de salvar.'
+          ? 'Ao aplicar, o texto completo e um resumo organizado serão colocados no campo da consulta. Arquivos enviados podem ser ouvidos aqui; revise ou digite a transcrição antes de aplicar. Nomes, medicamentos, doses e datas devem ser conferidos.'
           : 'Ao aplicar, a fala será inserida no campo de comentário. Revise o texto antes de salvar.'}
       </Typography.Paragraph>
     </Card>
