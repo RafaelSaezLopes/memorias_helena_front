@@ -1,4 +1,4 @@
-import { DeleteOutlined, EditOutlined, FileTextOutlined, MedicineBoxOutlined, PlusOutlined } from '@ant-design/icons';
+import { ClearOutlined, DeleteOutlined, EditOutlined, FileTextOutlined, MedicineBoxOutlined, PlusOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Col, DatePicker, Empty, Form, Input, Modal, Popconfirm, Radio, Row, Select, Space, Spin, Tag, TimePicker, Timeline, Typography, message } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
@@ -35,7 +35,7 @@ export default function DailyNotesPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DailyNoteApi | null>(null);
   const [filter, setFilter] = useState<'TODOS' | 'DIA' | 'CONSULTA'>('TODOS');
-  const [month, setMonth] = useState(dayjs());
+  const [month, setMonth] = useState<Dayjs | null>(null);
   const [form] = Form.useForm<FormValues>();
   const noteType = Form.useWatch('type', form);
   const selectedProfessionalId = Form.useWatch('professionalId', form);
@@ -44,8 +44,10 @@ export default function DailyNotesPage() {
     if (!child?.id) return;
     setLoading(true); setError(null);
     try {
-      const from = month.startOf('month').toISOString();
-      const to = month.endOf('month').toISOString();
+      // Carrega todo o histórico. O filtro de mês é aplicado no frontend para que
+      // a página abra mostrando todos os registros existentes no banco.
+      const from = dayjs('1900-01-01').startOf('day').toISOString();
+      const to = dayjs('2100-12-31').endOf('day').toISOString();
       const [notesData, professionalsData, specialtiesData] = await Promise.all([
         dailyNotesService.list(child.id, from, to),
         professionalsService.list(child.id),
@@ -59,7 +61,7 @@ export default function DailyNotesPage() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { void load(); }, [child?.id, month.format('YYYY-MM')]);
+  useEffect(() => { void load(); }, [child?.id]);
 
   useEffect(() => {
     if (!selectedProfessionalId) return;
@@ -69,7 +71,19 @@ export default function DailyNotesPage() {
 
   const filtered = useMemo(() => notes
     .filter((note) => filter === 'TODOS' || (filter === 'DIA' ? note.type === 'Daily' : note.type === 'Appointment'))
-    .sort((a, b) => dayjs(b.occurredAt).valueOf() - dayjs(a.occurredAt).valueOf()), [notes, filter]);
+    .filter((note) => !month || dayjs(note.occurredAt).isSame(month, 'month'))
+    .sort((a, b) => dayjs(b.occurredAt).valueOf() - dayjs(a.occurredAt).valueOf()), [notes, filter, month]);
+
+  const groupedByDate = useMemo(() => {
+    const groups = new Map<string, DailyNoteApi[]>();
+    for (const note of filtered) {
+      const key = dayjs(note.occurredAt).format('YYYY-MM-DD');
+      const current = groups.get(key) || [];
+      current.push(note);
+      groups.set(key, current);
+    }
+    return Array.from(groups.entries());
+  }, [filtered]);
 
   const showCreate = () => {
     setEditing(null);
@@ -122,18 +136,51 @@ export default function DailyNotesPage() {
   return <>
     <PageHeader title="Diário e anotações" subtitle="Registre acontecimentos do dia, sintomas, comportamentos e comentários sobre consultas." action={showCreate} actionLabel="Nova anotação" />
     {error && <Alert type="error" showIcon message={error} action={<Button onClick={() => void load()}>Tentar novamente</Button>} style={{ marginBottom: 16 }} />}
-    <Card className="filter-card"><Row gutter={[12, 12]} align="middle"><Col flex="auto"><Radio.Group value={filter} onChange={(event) => setFilter(event.target.value)} optionType="button" buttonStyle="solid"><Radio.Button value="TODOS">Todos</Radio.Button><Radio.Button value="DIA">Dia a dia</Radio.Button><Radio.Button value="CONSULTA">Consultas</Radio.Button></Radio.Group></Col><Col><DatePicker picker="month" value={month} onChange={(value) => value && setMonth(value)} format="MMMM [de] YYYY" allowClear={false} /></Col><Col><Button type="primary" icon={<PlusOutlined />} onClick={showCreate}>Adicionar</Button></Col></Row></Card>
+    <Card className="filter-card">
+      <Row gutter={[12, 12]} align="middle">
+        <Col flex="auto">
+          <Radio.Group value={filter} onChange={(event) => setFilter(event.target.value)} optionType="button" buttonStyle="solid">
+            <Radio.Button value="TODOS">Todos</Radio.Button>
+            <Radio.Button value="DIA">Dia a dia</Radio.Button>
+            <Radio.Button value="CONSULTA">Consultas</Radio.Button>
+          </Radio.Group>
+        </Col>
+        <Col>
+          <Space.Compact>
+            <DatePicker
+              picker="month"
+              value={month}
+              onChange={setMonth}
+              format="MMMM [de] YYYY"
+              placeholder="Filtrar por mês"
+              allowClear
+            />
+            {month && <Button icon={<ClearOutlined />} onClick={() => setMonth(null)}>Limpar</Button>}
+          </Space.Compact>
+        </Col>
+        <Col><Button type="primary" icon={<PlusOutlined />} onClick={showCreate}>Adicionar</Button></Col>
+      </Row>
+    </Card>
     <Card className="daily-timeline-card">
       <Spin spinning={loading}>
-      {filtered.length ? <Timeline items={filtered.map((note) => {
-        const tags = splitTags(note.tags); const occurred = dayjs(note.occurredAt);
-        return { color: note.type === 'Appointment' ? 'purple' : 'blue', dot: note.type === 'Appointment' ? <MedicineBoxOutlined /> : <FileTextOutlined />, children: <div className="diary-entry">
-          <div className="diary-entry-header"><div><Space wrap><Typography.Title level={4}>{note.title}</Typography.Title><Tag color={note.type === 'Appointment' ? 'purple' : 'blue'}>{note.type === 'Appointment' ? 'CONSULTA' : 'DIA A DIA'}</Tag>{note.mood && <Tag color={moodColor[note.mood]}>{moodLabel[note.mood] || note.mood}</Tag>}</Space><Typography.Text type="secondary">{occurred.format('DD/MM/YYYY')} às {occurred.format('HH:mm')}</Typography.Text></div><Space><Button size="small" icon={<EditOutlined />} onClick={() => showEdit(note)}>Editar</Button><Popconfirm title="Excluir esta anotação?" onConfirm={() => void remove(note.id)}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm></Space></div>
-          {note.type === 'Appointment' && (note.professional || note.specialty) && <div className="consultation-meta"><strong>{note.professional?.name || 'Profissional não informado'}</strong>{note.specialty?.name && <span>{note.specialty.name}</span>}</div>}
-          <Typography.Paragraph className="diary-content">{note.content}</Typography.Paragraph>
-          {!!tags.length && <Space wrap>{tags.map((tag) => <Tag key={tag}>#{tag}</Tag>)}</Space>}
-        </div> };
-      })} /> : !loading && <Empty description="Nenhuma anotação encontrada neste período" />}
+      {groupedByDate.length ? groupedByDate.map(([dateKey, dayNotes]) => {
+        const groupDate = dayjs(dateKey);
+        return <section className="diary-date-group" key={dateKey}>
+          <div className="diary-date-heading">
+            <Typography.Title level={4}>{groupDate.format('DD [de] MMMM [de] YYYY')}</Typography.Title>
+            <Typography.Text type="secondary">{dayNotes.length} {dayNotes.length === 1 ? 'anotação' : 'anotações'}</Typography.Text>
+          </div>
+          <Timeline items={dayNotes.map((note) => {
+            const tags = splitTags(note.tags); const occurred = dayjs(note.occurredAt);
+            return { color: note.type === 'Appointment' ? 'purple' : 'blue', dot: note.type === 'Appointment' ? <MedicineBoxOutlined /> : <FileTextOutlined />, children: <div className="diary-entry">
+              <div className="diary-entry-header"><div><Space wrap><Typography.Title level={4}>{note.title}</Typography.Title><Tag color={note.type === 'Appointment' ? 'purple' : 'blue'}>{note.type === 'Appointment' ? 'CONSULTA' : 'DIA A DIA'}</Tag>{note.mood && <Tag color={moodColor[note.mood]}>{moodLabel[note.mood] || note.mood}</Tag>}</Space><Typography.Text type="secondary">às {occurred.format('HH:mm')}</Typography.Text></div><Space><Button size="small" icon={<EditOutlined />} onClick={() => showEdit(note)}>Editar</Button><Popconfirm title="Excluir esta anotação?" onConfirm={() => void remove(note.id)}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm></Space></div>
+              {note.type === 'Appointment' && (note.professional || note.specialty) && <div className="consultation-meta"><strong>{note.professional?.name || 'Profissional não informado'}</strong>{note.specialty?.name && <span>{note.specialty.name}</span>}</div>}
+              <Typography.Paragraph className="diary-content">{note.content}</Typography.Paragraph>
+              {!!tags.length && <Space wrap>{tags.map((tag) => <Tag key={tag}>#{tag}</Tag>)}</Space>}
+            </div> };
+          })} />
+        </section>;
+      }) : !loading && <Empty description={month ? 'Nenhuma anotação encontrada no mês selecionado' : 'Nenhuma anotação encontrada'} />}
       </Spin>
     </Card>
     <Modal title={editing ? 'Editar anotação' : 'Nova anotação'} open={open} onCancel={() => setOpen(false)} onOk={() => void save()} okText="Salvar" confirmLoading={saving} width={720} destroyOnHidden>

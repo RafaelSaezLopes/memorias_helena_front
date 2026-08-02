@@ -157,3 +157,8 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
   .voice-recorder-card .ant-btn { min-height: 40px; }
   .voice-audio-preview audio { max-width: 100%; }
 }
+
+.diary-date-group + .diary-date-group { margin-top: 28px; }
+.diary-date-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 2px 0 18px; padding-bottom: 10px; border-bottom: 1px solid #f0f0f0; }
+.diary-date-heading h4 { margin: 0 !important; }
+@media(max-width: 700px){ .diary-date-heading{align-items:flex-start;flex-direction:column;gap:2px}.filter-card .ant-space-compact{width:100%}.filter-card .ant-picker{flex:1} }
