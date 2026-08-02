@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
+import { PermissionRoute } from './PermissionRoute';
 import { AppLayout } from '../layouts/AppLayout';
 import LoginPage from '../pages/auth/LoginPage';
 import DashboardPage from '../pages/dashboard/DashboardPage';
@@ -18,21 +19,59 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/dados-pessoais" element={<ProfilePage />} />
-          <Route path="/documentos" element={<DocumentsPage />} />
-          <Route path="/fotos" element={<AlbumsPage />} />
-          <Route path="/fotos/:albumId" element={<AlbumDetailPage />} />
-          <Route path="/saude/profissionais" element={<ProfessionalsPage />} />
-          <Route path="/saude/exames" element={<ExamsPage />} />
-          <Route path="/saude/medicamentos" element={<MedicationsPage />} />
-          <Route path="/saude/diario-miccional" element={<VoidingDiaryPage />} />
-          <Route path="/diario" element={<DailyNotesPage />} />
+          <Route element={<PermissionRoute module="dashboard" />}>
+            <Route path="/" element={<DashboardPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute module="personal_data" />}>
+            <Route path="/dados-pessoais" element={<ProfilePage />} />
+          </Route>
+
+          <Route element={<PermissionRoute module="documents" />}>
+            <Route path="/documentos" element={<DocumentsPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute module="photos" />}>
+            <Route path="/fotos" element={<AlbumsPage />} />
+            <Route path="/fotos/:albumId" element={<AlbumDetailPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute module="professionals" />}>
+            <Route
+              path="/saude/profissionais"
+              element={<ProfessionalsPage />}
+            />
+          </Route>
+
+          <Route element={<PermissionRoute module="exams" />}>
+            <Route path="/saude/exames" element={<ExamsPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute module="medications" />}>
+            <Route
+              path="/saude/medicamentos"
+              element={<MedicationsPage />}
+            />
+          </Route>
+
+          <Route element={<PermissionRoute module="voiding_diary" />}>
+            <Route
+              path="/saude/diario-miccional"
+              element={<VoidingDiaryPage />}
+            />
+          </Route>
+
+          <Route element={<PermissionRoute module="daily_notes" />}>
+            <Route path="/diario" element={<DailyNotesPage />} />
+          </Route>
+
           <Route path="/configuracoes" element={<SettingsPage />} />
         </Route>
       </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
